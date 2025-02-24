@@ -59,6 +59,7 @@ func (s *SSE) handlePush(ctx *fasthttp.RequestCtx, ip string, authorized bool) {
 	}
 	decoded = decoded[:decLen]
 
+
 	cli := s.client(to, false)
 
 	tm := time.Now()
@@ -74,11 +75,10 @@ func (s *SSE) handlePush(ctx *fasthttp.RequestCtx, ip string, authorized bool) {
 		return
 	}
 
-	select {
-	case cli.Signal <- struct{}{}:
-	default:
-	}
+	// Блокирующая отправка сигнала, чтобы гарантировать уведомление подписчика
+	cli.Signal <- struct{}{}
 
+	// обработка webhook (без изменений)
 	if topic := string(ctx.QueryArgs().Peek("topic")); topic != "" {
 		wh := WebhookData{
 			ClientID: clientId,
@@ -91,7 +91,6 @@ func (s *SSE) handlePush(ctx *fasthttp.RequestCtx, ip string, authorized bool) {
 			case webhook <- wh:
 				log.Debug().Int("index", i).Str("topic", topic).Msg("webhook added to queue")
 			default:
-				// skip when overflow
 				log.Warn().Int("index", i).Str("topic", topic).Msg("webhook buffer overflow")
 			}
 		}
@@ -99,5 +98,4 @@ func (s *SSE) handlePush(ctx *fasthttp.RequestCtx, ip string, authorized bool) {
 
 	metrics.Global.PushedMessages.Inc()
 	respOk(ctx)
-	return
 }

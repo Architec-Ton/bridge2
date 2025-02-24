@@ -13,15 +13,19 @@ import (
 
 type RedisStore struct {
 	client *redis.Client
+	key    string // ключ зависит от clientID
 }
 
-func NewRedisStore(addr, password string, db int) *RedisStore {
+func NewRedisStore(clientID, addr, password string, db int) *RedisStore {
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     addr,
 		Password: password,
 		DB:       db,
 	})
-	return &RedisStore{client: rdb}
+	return &RedisStore{
+		client: rdb,
+		key:    "events:" + clientID,
+	}
 }
 
 func (r *RedisStore) Push(event *bridge.Event) bool {
@@ -34,14 +38,19 @@ func (r *RedisStore) Push(event *bridge.Event) bool {
 		return false
 	}
 
-	// Convert event.ID to string
-	eventIDStr := strconv.FormatUint(event.ID, 10)
-
-	if err := r.client.Set(ctx, eventIDStr, data, time.Duration(event.Deadline-time.Now().Unix())*time.Second).Err(); err != nil {
-		log.Error().Err(err).Msg("failed to push event to redis")
+	score := float64(event.ID)
+	// Добавляем событие в отсортированное множество
+	if err := r.client.ZAdd(ctx, r.key, redis.Z{
+		Score:  score,
+		Member: data,
+	}).Err(); err != nil {
+		log.Error().Err(err).Msg("failed to push event to redis sorted set")
 		return false
 	}
 
+	// Опционально: удаляем устаревшие события (с score меньше текущего времени)
+	currentTime := time.Now().Unix()
+	r.client.ZRemRangeByScore(ctx, r.key, "0", strconv.FormatInt(currentTime, 10))
 	return true
 }
 
@@ -49,24 +58,20 @@ func (r *RedisStore) ExecuteAll(lastEventId uint64, exec func(event *bridge.Even
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	keys, err := r.client.Keys(ctx, "*").Result()
+	// Получаем события с ID больше lastEventId
+	minScore := strconv.FormatUint(lastEventId+1, 10)
+	results, err := r.client.ZRangeByScore(ctx, r.key, &redis.ZRangeBy{
+		Min: minScore,
+		Max: "+inf",
+	}).Result()
 	if err != nil {
 		return err
 	}
 
-	for _, key := range keys {
-		data, err := r.client.Get(ctx, key).Result()
-		if err != nil {
-			return err
-		}
-
+	for _, data := range results {
 		var event bridge.Event
 		if err := json.Unmarshal([]byte(data), &event); err != nil {
 			return err
-		}
-
-		if event.ID <= lastEventId {
-			continue
 		}
 
 		if err := exec(&event); err != nil {

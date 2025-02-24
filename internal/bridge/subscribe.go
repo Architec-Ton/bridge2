@@ -53,9 +53,11 @@ func (s *SSE) handleSubscribe(ctx *fasthttp.RequestCtx, ip string, authorized bo
 		}
 	}
 
-	var err error
+	// var err error
+	// Извлечение last_event_id из параметров запроса
 	var lastEventId = uint64(time.Now().UnixNano())
 	if eventStr := ctx.QueryArgs().Peek("last_event_id"); eventStr != nil {
+		var err error
 		lastEventId, err = strconv.ParseUint(string(eventStr), 10, 64)
 		if err != nil {
 			respError(ctx, "last_event_id is invalid", 400)
@@ -96,11 +98,9 @@ func (s *SSE) handleSubscribe(ctx *fasthttp.RequestCtx, ip string, authorized bo
 			for _, cli := range clients {
 				atomic.AddInt32(&cli.Subscriptions, -1)
 			}
-
 			if onFinish != nil {
 				onFinish()
 			}
-
 			metrics.Global.ActiveSubscriptions.Dec()
 			log.Debug().Strs("clients", ids).Msg("unsubscribed")
 		}()
@@ -129,14 +129,11 @@ func (s *SSE) handleSubscribe(ctx *fasthttp.RequestCtx, ip string, authorized bo
 			}))
 
 			now := time.Now().Unix()
-			if idx == len(eventCases) { // event from ping channel
+			if idx == len(eventCases) { // сигнал пинга
 				if now-lastMessageAt < 5 {
-					// no need to ping too often
 					continue
 				}
-
 				if err := sendEvent(conn, heartbeat); err != nil {
-					// stop listen
 					return
 				}
 				lastMessageAt = now
@@ -146,17 +143,23 @@ func (s *SSE) handleSubscribe(ctx *fasthttp.RequestCtx, ip string, authorized bo
 			log.Debug().Str("client", ids[idx]).Msg("event signal")
 
 			delivered := 0
-			err = clients[idx].ExecuteAll(lastEventId, func(e *Event) error {
+			maxEventID := lastEventId
+			// Выполнение всех накопившихся событий с id > lastEventId
+			err := clients[idx].ExecuteAll(lastEventId, func(e *Event) error {
 				delivered++
-
-				data, _ := json.Marshal(e) // not return an error to not break client
+				if e.ID > maxEventID {
+					maxEventID = e.ID
+				}
+				data, _ := json.Marshal(e)
 				return sendEvent(conn, []byte("event: message"+
 					"\r\nid: "+strconv.FormatUint(e.ID, 10)+
 					"\r\ndata: "+string(data)+"\r\n\r\n"))
 			})
 			if err != nil {
-				return // stop listen
+				return // прекращаем обработку при ошибке
 			}
+			// Обновляем lastEventId, чтобы при следующей выборке доставлять только новые события
+			lastEventId = maxEventID
 
 			metrics.Global.DeliveredMessages.Add(float64(delivered))
 			lastMessageAt = now
@@ -165,11 +168,16 @@ func (s *SSE) handleSubscribe(ctx *fasthttp.RequestCtx, ip string, authorized bo
 }
 
 func sendEvent(w net.Conn, data []byte) error {
+	// Формирование чанка по правилам chunked transfer encoding
 	data = append([]byte(strconv.FormatInt(int64(len(data)), 16)+"\r\n"), data...)
 	data = append(data, '\r', '\n')
 
 	if _, err := w.Write(data); err != nil {
 		return err
+	}
+	// Если соединение поддерживает flush, сбрасываем буфер
+	if flusher, ok := w.(interface{ Flush() error }); ok {
+		return flusher.Flush()
 	}
 	return nil
 }

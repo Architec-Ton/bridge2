@@ -73,7 +73,7 @@ func main() {
 
 	// Redis store creator
 	maker := func(id string) bridge.Store {
-		return store.NewRedisStore(cfg.RedisAddr, cfg.RedisPassword, cfg.RedisDB)
+		return store.NewRedisStore(id, cfg.RedisAddr, cfg.RedisPassword, cfg.RedisDB)
 	}
 
 	var webhooks []chan<- bridge.WebhookData

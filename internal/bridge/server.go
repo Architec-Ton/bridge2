@@ -224,7 +224,7 @@ func (s *SSE) client(shortedId string, subscribed bool) *Client {
 	if cli == nil {
 		cli = &Client{
 			Store:  s.storageMaker(shortedId),
-			Signal: make(chan struct{}, 1),
+			Signal: make(chan struct{}, 100),
 		}
 		s.clients[shortedId] = cli
 	}

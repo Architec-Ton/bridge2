@@ -166,7 +166,7 @@ func TestBridge(t *testing.T) {
 	log.Logger = zerolog.Nop()
 	// redis store creator
 	maker := func(id string) bridge.Store {
-		return store.NewRedisStore(redisAddr, redisPassword, redisDB)
+		return store.NewRedisStore(id, redisAddr, redisPassword, redisDB)
 	}
 
 	wh := make(chan bridge.WebhookData, 100)
