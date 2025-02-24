@@ -55,7 +55,7 @@ func (r *RedisStore) Push(event *bridge.Event) bool {
 }
 
 func (r *RedisStore) ExecuteAll(lastEventId uint64, exec func(event *bridge.Event) error) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Second)
 	defer cancel()
 
 	// Получаем события с ID больше lastEventId
