@@ -176,8 +176,8 @@ func sendEvent(w net.Conn, data []byte) error {
 		return err
 	}
 	// Если соединение поддерживает flush, сбрасываем буфер
-	if flusher, ok := w.(interface{ Flush() error }); ok {
-		return flusher.Flush()
-	}
+	// if flusher, ok := w.(interface{ Flush() error }); ok {
+	// 	return flusher.Flush()
+	// }
 	return nil
 }
