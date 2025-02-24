@@ -8,7 +8,6 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	"github.com/joho/godotenv"
 	"io"
 	"math/big"
 	"net/http"
@@ -45,10 +44,6 @@ type Config struct {
 }
 
 func main() {
-	if err := godotenv.Load(); err != nil {
-		log.Warn().Msg("No .env file found")
-	}
-
 	var cfg Config
 	if err := envconfig.Process(context.Background(), &cfg); err != nil {
 		panic("failed to process env: " + err.Error())

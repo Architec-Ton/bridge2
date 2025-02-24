@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/joho/godotenv"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/valyala/fasthttp"
@@ -143,11 +142,6 @@ func (l *listener) Addr() net.Addr {
 //}
 
 func TestBridge(t *testing.T) {
-	// load environment variables from .env file
-	if err := godotenv.Load(); err != nil {
-		t.Log("No .env file found")
-	}
-
 	redisAddr := os.Getenv("REDIS_ADDR")
 	redisPassword := os.Getenv("REDIS_PASSWORD")
 	redisDB := 0
